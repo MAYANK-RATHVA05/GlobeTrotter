@@ -15,6 +15,13 @@ interface CalActivity {
 
 const WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
+const TRIP_COLORS = [
+  '#2647E8', '#0E8F87', '#C98A05', '#C93C24', '#8A2BE2', '#2E8B57', '#D2691E', '#1E90FF', '#FF1493'
+];
+function getTripColor(id: number) {
+  return TRIP_COLORS[id % TRIP_COLORS.length];
+}
+
 /** The first and last day the month grid has to show, Monday-first. */
 function monthWindow(anchor: Date) {
   const first = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
@@ -41,6 +48,26 @@ export default function Calendar() {
   const [tripFilter, setTripFilter] = useState('');
 
   const window = useMemo(() => monthWindow(anchor), [anchor]);
+
+  async function handleDrop(e: React.DragEvent, targetDate: string) {
+    e.preventDefault();
+    const activityId = e.dataTransfer.getData('activity_id');
+    const tripId = e.dataTransfer.getData('trip_id');
+    if (!activityId || !tripId) return;
+
+    setActivities((current) =>
+      current.map((a) => (a.id === Number(activityId) ? { ...a, scheduled_date: targetDate } : a))
+    );
+
+    try {
+      await api.patch(`/trips/${tripId}/activities/${activityId}`, { scheduledDate: targetDate });
+    } catch (err) {
+      setError(errorText(err));
+      // Reload on failure to revert optimistic update
+      api.get('/trips/calendar/range', { params: { from: iso(window.from), to: iso(window.to) } })
+        .then(({ data }) => { setTrips(data.trips); setActivities(data.activities); });
+    }
+  }
 
   useEffect(() => {
     setLoading(true);
@@ -132,7 +159,12 @@ export default function Calendar() {
               <li key={trip.id}>
                 <Link
                   to={`/trips/${trip.id}`}
-                  className="inline-flex items-center gap-2 rounded-full border border-route/25 bg-route-soft px-3 py-1 text-[13px] font-medium text-route hover:bg-route hover:text-white"
+                  className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[13px] font-medium hover:opacity-80"
+                  style={{
+                    backgroundColor: `color-mix(in srgb, ${getTripColor(trip.id)} 15%, transparent)`,
+                    color: getTripColor(trip.id),
+                    borderColor: `color-mix(in srgb, ${getTripColor(trip.id)} 25%, transparent)`,
+                  }}
                 >
                   {trip.name}
                   <span className="num text-[11px] opacity-75">{shortDate(trip.start_date)} – {shortDate(trip.end_date)}</span>
@@ -150,47 +182,99 @@ export default function Calendar() {
           <div className="grid grid-cols-7 border-b bg-canvas/60">
             {WEEK.map((label) => <span key={label} className="eyebrow px-2 py-2 text-center">{label}</span>)}
           </div>
-          <div className="grid grid-cols-7">
-            {Array.from({ length: window.cells }, (_, index) => {
-              const date = new Date(window.from);
-              date.setDate(date.getDate() + index);
-              const key = iso(date);
-              const outside = date.getMonth() !== anchor.getMonth();
-              const list = byDate.get(key) ?? [];
-              const spend = list.reduce((sum, a) => sum + Number(a.cost), 0);
+          <div className="flex flex-col border-x border-t rounded-b-[14px] overflow-hidden">
+            {Array.from({ length: window.cells / 7 }, (_, weekIndex) => {
+              const weekDays = Array.from({ length: 7 }, (_, i) => {
+                const date = new Date(window.from);
+                date.setDate(date.getDate() + weekIndex * 7 + i);
+                return { date, key: iso(date), outside: date.getMonth() !== anchor.getMonth() };
+              });
+              
+              const weekStartKey = weekDays[0].key;
+              const weekEndKey = weekDays[6].key;
+              
+              const weekTrips = trips.filter(t => t.start_date <= weekEndKey && t.end_date >= weekStartKey);
 
               return (
-                <div
-                  key={key}
-                  className={`min-h-[112px] border-b border-r p-1.5 ${outside ? 'bg-canvas/40' : ''} ${
-                    key === today ? 'bg-route-soft/40' : ''
-                  }`}
-                >
-                  <div className="mb-1 flex items-baseline justify-between">
-                    <span className={`num text-[12px] ${key === today ? 'font-bold text-route' : outside ? 'text-mist' : 'font-semibold'}`}>
-                      {date.getDate()}
-                    </span>
-                    {spend > 0 && <span className="num text-[10px] text-mist">{currency(spend)}</span>}
-                  </div>
-                  <ul className="space-y-0.5">
-                    {list.slice(0, 3).map((activity) => {
-                      const tone = categoryTone[activity.category];
+                <div key={weekIndex} className="relative grid grid-cols-7 border-b min-h-[112px]">
+                  
+                  {/* Absolute Trip Bars Layer */}
+                  <div className="absolute top-7 left-0 right-0 z-10 flex flex-col gap-1 pointer-events-none">
+                    {weekTrips.map(trip => {
+                      const startIdx = weekDays.findIndex(d => d.key === trip.start_date);
+                      const endIdx = weekDays.findIndex(d => d.key === trip.end_date);
+                      
+                      const spanStart = startIdx === -1 ? (trip.start_date < weekStartKey ? 0 : -1) : startIdx;
+                      const spanEnd = endIdx === -1 ? (trip.end_date > weekEndKey ? 6 : -1) : endIdx;
+
+                      if (spanStart === -1 || spanEnd === -1) return null;
+                      const span = spanEnd - spanStart + 1;
+
                       return (
-                        <li key={activity.id}>
-                          <Link
-                            to={`/trips/${activity.trip_id}`}
-                            title={`${activity.title} — ${activity.city_name}`}
-                            className="block truncate rounded px-1.5 py-0.5 text-[10.5px] hover:opacity-80"
-                            style={{ background: tone.bg, color: tone.fg }}
-                          >
-                            {activity.start_time && <span className="num mr-1">{activity.start_time.slice(0, 5)}</span>}
-                            {activity.title}
-                          </Link>
-                        </li>
+                         <div key={trip.id} className="grid grid-cols-7 px-1">
+                            <div 
+                               className="pointer-events-auto rounded-[3px] text-[10.5px] font-medium text-white px-2 py-0.5 truncate hover:opacity-90 shadow-sm"
+                               style={{ 
+                                  gridColumn: `${spanStart + 1} / span ${span}`,
+                                  backgroundColor: getTripColor(trip.id),
+                                  marginLeft: spanStart > 0 ? '4px' : '0px',
+                                  marginRight: spanEnd < 6 ? '4px' : '0px'
+                               }}
+                            >
+                               <Link to={`/trips/${trip.id}`} className="block w-full">{trip.name}</Link>
+                            </div>
+                         </div>
                       );
                     })}
-                    {list.length > 3 && <li className="num px-1.5 text-[10px] text-mist">+{list.length - 3} more</li>}
-                  </ul>
+                  </div>
+
+                  {/* Day Columns */}
+                  {weekDays.map(day => {
+                    const list = byDate.get(day.key) ?? [];
+                    const spend = list.reduce((sum, a) => sum + Number(a.cost), 0);
+                    
+                    return (
+                      <div 
+                        key={day.key}
+                        className={`relative flex flex-col border-r last:border-r-0 p-1.5 ${day.outside ? 'bg-canvas/40' : ''} ${day.key === today ? 'bg-route-soft/40' : ''}`}
+                        style={{ paddingTop: `${28 + weekTrips.length * 22}px` }}
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => handleDrop(e, day.key)}
+                      >
+                        <div className="absolute top-1.5 left-1.5 right-1.5 flex items-baseline justify-between pointer-events-none">
+                          <span className={`num text-[12px] ${day.key === today ? 'font-bold text-route' : day.outside ? 'text-mist' : 'font-semibold'}`}>
+                            {day.date.getDate()}
+                          </span>
+                          {spend > 0 && <span className="num text-[10px] text-mist">{currency(spend)}</span>}
+                        </div>
+                        
+                        <ul className="space-y-0.5 mt-auto relative z-10">
+                          {list.slice(0, 3).map((activity) => {
+                            const tone = categoryTone[activity.category];
+                            return (
+                              <li key={activity.id}>
+                                <Link
+                                  to={`/trips/${activity.trip_id}`}
+                                  draggable
+                                  onDragStart={(e) => {
+                                    e.dataTransfer.setData('activity_id', String(activity.id));
+                                    e.dataTransfer.setData('trip_id', String(activity.trip_id));
+                                  }}
+                                  title={`${activity.title} — ${activity.city_name}`}
+                                  className="block truncate rounded px-1.5 py-0.5 text-[10.5px] hover:opacity-80 cursor-move"
+                                  style={{ background: tone.bg, color: tone.fg }}
+                                >
+                                  {activity.start_time && <span className="num mr-1">{activity.start_time.slice(0, 5)}</span>}
+                                  {activity.title}
+                                </Link>
+                              </li>
+                            );
+                          })}
+                          {list.length > 3 && <li className="num px-1.5 text-[10px] text-mist">+{list.length - 3} more</li>}
+                        </ul>
+                      </div>
+                    )
+                  })}
                 </div>
               );
             })}

@@ -175,6 +175,27 @@ h1, h2, h3, h4 {
   background: var(--color-surface);
 }
 
+/* ------------------------------------------------------------- special */
+
+.trip-highlight {
+  background: linear-gradient(135deg, var(--color-route-soft) 0%, transparent 100%);
+  position: relative;
+  overflow: hidden;
+}
+.trip-highlight::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.6), transparent);
+  transform: translateX(-100%);
+  animation: shimmer 2.5s infinite ease-in-out;
+  pointer-events: none;
+}
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
 /* ------------------------------------------------------------ animations */
 
 @keyframes rise {
