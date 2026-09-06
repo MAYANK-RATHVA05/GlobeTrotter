@@ -20,6 +20,8 @@ build/
 .next/
 out/
 coverage/
+*.tsbuildinfo
+
 
 # ---------- Frontend ----------
 frontend/node_modules/
