@@ -1,22 +1,2 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { run } from '@/lib/db';
-import { requireAuth } from '@/lib/auth';
-import { handleApiError } from '@/lib/helpers';
-import { loadTrip, ownedTrip } from '@/lib/trips';
-
-interface Params {
-  params: Promise<{ id: string; costId: string }>;
-}
-
-export async function DELETE(req: NextRequest, { params }: Params) {
-  try {
-    const user = await requireAuth(req);
-    const { id, costId } = await params;
-    const trip = await ownedTrip(id, user.id);
-
-    await run('DELETE FROM trip_costs WHERE id = ? AND trip_id = ?', [costId, trip.id]);
-    return NextResponse.json({ trip: await loadTrip(trip.id) });
-  } catch (err) {
-    return handleApiError(err);
-  }
-}
+import {NextRequest,NextResponse} from 'next/server';import {connectMongo} from '@/lib/db';import {Trip} from '@/lib/models';import {loadTrip,ownedTrip} from '@/lib/trips';import {requireAuth} from '@/lib/auth';import {badRequest,handleApiError} from '@/lib/helpers';
+export async function DELETE(req:NextRequest,{params}:{params:Promise<{id:string;costId:string}>}){try{const u=await requireAuth(req);const {id,costId}=await params;const t=await ownedTrip(id,u.id);await connectMongo();const doc=await Trip.findById(t._id);if(!doc?.costs.id(costId))throw badRequest('That cost is not on this trip.');doc.costs.pull(costId);await doc.save();return NextResponse.json({trip:await loadTrip(id)});}catch(e){return handleApiError(e);}}
