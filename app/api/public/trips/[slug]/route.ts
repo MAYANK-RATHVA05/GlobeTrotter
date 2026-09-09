@@ -1,21 +1,2 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { one } from '@/lib/db';
-import { handleApiError, notFound } from '@/lib/helpers';
-import { loadTrip } from '@/lib/trips';
-
-interface Params {
-  params: Promise<{ slug: string }>;
-}
-
-export async function GET(req: NextRequest, { params }: Params) {
-  try {
-    const { slug } = await params;
-    const row = await one<{ id: number }>('SELECT id FROM trips WHERE share_slug = ? AND is_public = 1', [slug]);
-    if (!row) throw notFound('This itinerary is private or the link has expired.');
-
-    const trip = await loadTrip(row.id);
-    return NextResponse.json({ trip });
-  } catch (err) {
-    return handleApiError(err);
-  }
-}
+import {NextRequest,NextResponse} from 'next/server';import {connectMongo} from '@/lib/db';import {Trip} from '@/lib/models';import {tripDto} from '@/lib/mongo';import {handleApiError,notFound} from '@/lib/helpers';
+export async function GET(req:NextRequest,{params}:{params:Promise<{slug:string}>}){try{const {slug}=await params;await connectMongo();const trip=await Trip.findOne({shareSlug:slug,isPublic:true}).populate('user','firstName lastName photoUrl').populate('stops.city').lean();if(!trip)throw notFound('This itinerary is private or the link has expired.');return NextResponse.json({trip:tripDto(trip,trip.user)});}catch(e){return handleApiError(e);}}
