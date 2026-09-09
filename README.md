@@ -1,99 +1,58 @@
-# 🌍 GlobeTrotter
+# GlobeTrotter
 
-GlobeTrotter is a personalized travel planning web application that helps users
-create, organize, and share multi-city travel itineraries.
+GlobeTrotter is a travel-planning workspace for building multi-city itineraries, scheduling activities, tracking budgets, saving destinations, and sharing trips.
 
-The application allows users to plan trips by adding cities, activities,
-travel dates, and budgets while providing an interactive view of their complete
-journey.
+## Stack
 
----
+- Next.js 15 + React 19 + TypeScript
+- Tailwind CSS + reusable UI primitives
+- Axios + Recharts + Lucide
+- MongoDB + Mongoose
+- bcryptjs + JWT with an httpOnly cookie
 
-## 🚀 Features
+## Architecture
 
-- 🔐 User Registration & Login
-- 👤 User Profile & Settings
-- 🏠 Personalized Dashboard
-- ✈️ Create and Manage Trips
-- 🗺️ Multi-City Itinerary Builder
-- 🏙️ City Search
-- 🎯 Activity Search
-- 📅 Trip Calendar & Timeline
-- 💰 Trip Budget & Cost Breakdown
-- 📊 Budget Visualization
-- 🔗 Shareable Public Itineraries
-- 📋 Copy Existing Trips
-- 🔑 Forgot Password
-- 👨‍💼 Admin Dashboard *(Optional)*
+`app/` contains pages and Route Handlers. `components/` contains the shared shell, navigation, cards, forms, and UI primitives. `lib/models.ts` defines MongoDB schemas; `lib/db.ts` owns the cached Mongoose connection; `lib/trips.ts` and `lib/mongo.ts` shape domain documents into the existing frontend API contract.
 
----
+Trip stops and their scheduled activities are intentionally embedded in a trip document because they are read and reordered together. Catalogue cities and activities remain referenced collections so they can be searched and reused across many trips. Saved cities are references from a user. Community posts reference users/cities/trips while storing likes as user references.
 
-## 🛠️ Tech Stack
+## Environment
 
-### Frontend
+Copy `.env.example` to `.env.local` and set:
 
-- React.js
-- React Router DOM
-- Tailwind CSS
-- Axios
-- React Hook Form
-- Recharts
-- FullCalendar
-- @dnd-kit
-- date-fns
+```env
+MONGODB_URI=
+JWT_SECRET=
+JWT_EXPIRES_IN=7d
+```
 
-### Backend
+Add your MongoDB connection string to **`MONGODB_URI`**. Never commit `.env.local` or production credentials.
 
-- Node.js
-- Express.js
-- Passport.js
-- express-session
-- bcrypt
-- Sequelize
-- Multer
+Optional connection tuning:
 
-### Database
+```env
+MONGODB_MAX_POOL_SIZE=10
+MONGODB_SERVER_SELECTION_TIMEOUT_MS=5000
+```
 
-- MySQL
+## Migrating an existing MySQL database
 
-### External APIs
+The repository includes `scripts/migrate-mysql-to-mongo.mjs`. It reads the existing relational tables (`users`, `cities`, `activities`, `trips`, `trip_stops`, `trip_activities`, `trip_costs`, `community_posts`, `post_likes`, and `saved_cities`) and converts them into the MongoDB structure while preserving legacy IDs for compatibility.
 
-- Google Places API
-- Google Calendar API
+The MySQL driver is a development-only dependency used by this one-time migration command; the application runtime uses Mongoose.
 
-### Other Services
+```bash
+npm install
+npm run migrate:mysql
+```
 
-- Nodemailer
-- Cloudinary *(Optional)*
+Set the old MySQL `DB_*` variables only while running the migration command.
 
----
+## Quality checks
 
-## 🏗️ Project Architecture
+```bash
+npm run type-check
+npm run build
+```
 
-```text
-GlobeTrotter
-│
-├── client/                     # React Frontend
-│   ├── src/
-│   │   ├── components/
-│   │   ├── pages/
-│   │   ├── layouts/
-│   │   ├── services/
-│   │   ├── hooks/
-│   │   └── App.jsx
-│   │
-│   └── package.json
-│
-├── server/                     # Node.js + Express Backend
-│   ├── controllers/
-│   ├── routes/
-│   ├── models/
-│   ├── middleware/
-│   ├── services/
-│   ├── config/
-│   ├── utils/
-│   └── server.js
-│
-├── .env
-├── .gitignore
-└── README.md
+A GitHub Actions workflow runs these checks on pushes and pull requests. A live MongoDB instance is required for authenticated/database flows.
