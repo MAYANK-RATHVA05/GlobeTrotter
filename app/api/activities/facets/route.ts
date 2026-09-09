@@ -1,14 +1,1 @@
-import { NextResponse } from 'next/server';
-import { q } from '@/lib/db';
-import { handleApiError } from '@/lib/helpers';
-
-export async function GET() {
-  try {
-    const categories = await q(
-      'SELECT category, COUNT(*) AS n, ROUND(AVG(cost)) AS avg_cost FROM activities GROUP BY category ORDER BY n DESC'
-    );
-    return NextResponse.json({ categories });
-  } catch (err) {
-    return handleApiError(err);
-  }
-}
+import {NextResponse} from 'next/server';import {connectMongo} from '@/lib/db';import {Activity} from '@/lib/models';import {handleApiError} from '@/lib/helpers';export async function GET(){try{await connectMongo();const rows=await Activity.aggregate([{$group:{_id:'$category',n:{$sum:1},avg_cost:{$avg:'$cost'}}},{$sort:{n:-1}}]);return NextResponse.json({categories:rows.map(x=>({category:x._id,n:x.n,avg_cost:Math.round(x.avg_cost||0)}))});}catch(e){return handleApiError(e);}}
