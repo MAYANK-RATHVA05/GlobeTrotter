@@ -1,22 +1,2 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { one, q } from '@/lib/db';
-import { handleApiError, notFound } from '@/lib/helpers';
-
-interface Params {
-  params: Promise<{ id: string }>;
-}
-
-export async function GET(req: NextRequest, { params }: Params) {
-  try {
-    const { id } = await params;
-    const city = await one('SELECT * FROM cities WHERE id = ?', [id]);
-    if (!city) throw notFound('That city is not in the catalogue.');
-    const activities = await q(
-      'SELECT * FROM activities WHERE city_id = ? ORDER BY popularity DESC, name ASC',
-      [city.id]
-    );
-    return NextResponse.json({ city, activities });
-  } catch (err) {
-    return handleApiError(err);
-  }
-}
+import { NextRequest,NextResponse } from 'next/server';import { connectMongo } from '@/lib/db';import { City,Activity } from '@/lib/models';import { resolveId,cityDto,activityDto } from '@/lib/mongo';import { handleApiError,notFound } from '@/lib/helpers';
+export async function GET(req:NextRequest,{params}:{params:Promise<{id:string}>}){try{await connectMongo();const {id}=await params;const cid=await resolveId(City,id);const city=await City.findById(cid).lean();if(!city)throw notFound('That city is not in the catalogue.');const acts=await Activity.find({city:city._id}).sort({popularity:-1,name:1}).lean();return NextResponse.json({city:cityDto(city,acts.length),activities:acts.map(a=>activityDto(a,city))});}catch(e){return handleApiError(e);}}
