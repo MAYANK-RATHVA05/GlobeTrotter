@@ -1,16 +1,5 @@
 import { NextResponse } from 'next/server';
-import { one, q } from '@/lib/db';
+import { connectMongo } from '@/lib/db';
+import { City } from '@/lib/models';
 import { handleApiError } from '@/lib/helpers';
-
-export async function GET() {
-  try {
-    const [countries, regions, range] = await Promise.all([
-      q('SELECT country, COUNT(*) AS n FROM cities GROUP BY country ORDER BY country'),
-      q('SELECT region, COUNT(*) AS n FROM cities GROUP BY region ORDER BY region'),
-      one('SELECT MIN(cost_index) AS min, MAX(cost_index) AS max FROM cities'),
-    ]);
-    return NextResponse.json({ countries, regions, costRange: range });
-  } catch (err) {
-    return handleApiError(err);
-  }
-}
+export async function GET(){try{await connectMongo();const [countries,regions,range]=await Promise.all([City.aggregate([{$group:{_id:'$country',n:{$sum:1}}},{$sort:{_id:1}}]),City.aggregate([{$group:{_id:'$region',n:{$sum:1}}},{$sort:{_id:1}}]),City.aggregate([{$group:{_id:null,min:{$min:'$costIndex'},max:{$max:'$costIndex'}}}])]);return NextResponse.json({countries:countries.map(x=>({country:x._id,n:x.n})),regions:regions.map(x=>({region:x._id,n:x.n})),costRange:range[0]??{min:0,max:0}});}catch(e){return handleApiError(e);}}
